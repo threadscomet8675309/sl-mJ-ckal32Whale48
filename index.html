@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>FaceTime Menu + Dialer</title>
+
+<!-- inside <head> -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2ecc71">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="FaceTime Easy">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+
+
+<!-- Noto Sans Duployan for extra legibility -->
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Duployan:wght@400;700;800;900&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --bg: #0b0b0b;
+    --panel: #111;
+    --green: #2ecc71;
+    --green-strong: #27ae60;
+    --text: #f7faf9;
+    --muted: #b8c3cc;
+    --focus: #5dade2;
+    --divider: #1f262c;
+    --item-bg: #151a1f;
+    --button-gloss: rgba(255,255,255,.10);
+    --button-shadow: rgba(0,0,0,.7);
+
+    /* stroked outline thickness (tripled) */
+    --stroke-outer: 78px; /* 26 * 3 */
+    --stroke-inner: 42px; /* 14 * 3 */
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; margin:0; }
+  body{
+    font-family: "Noto Sans Duployan", ui-sans-serif, -apple-system, system-ui, "Segoe UI", Roboto, Helvetica, Arial;
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.35;
+  }
+
+  .app{
+    display:grid;
+    grid-template-columns: minmax(520px, 560px) 1fr;  /* wider sidebar */
+    height:100vh;
+    width:100%;
+    position: relative;
+  }
+
+  /* Sidebar above the stage */
+  .sidebar{
+    position: relative;
+    z-index: 2;
+    background: var(--panel);
+    border-right: 1px solid var(--divider);
+    display:flex; flex-direction:column;
+    padding:28px; gap:28px;
+  }
+  .brand{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .brand h1{ margin:0; font-size:2rem; letter-spacing:.3px; }
+  .new-btn{
+    display:inline-flex; align-items:center; gap:10px;
+    background: var(--green); color:#08130b; border:0; border-radius:16px;
+    font-weight:900; padding:14px 18px; font-size:1.15rem;
+    box-shadow:0 1px 0 rgba(255,255,255,.15) inset, 0 6px 20px rgba(46,204,113,.25);
+    text-decoration:none; white-space:nowrap;
+  }
+  .new-btn:focus-visible{ outline:4px solid var(--focus); outline-offset:3px; }
+  .new-btn:active{ transform: translateY(1px); background: var(--green-strong); }
+
+  .section-wrap{ position:sticky; top:0; z-index:3; background:linear-gradient(#111, rgba(17,17,17,.85)); padding-bottom:6px; }
+  .section-label{ color:var(--muted); font-size:1.1rem; margin:0 2px 4px; }
+  .list{ display:flex; flex-direction:column; gap:30px; padding-top:6px; }
+
+  .contact{
+    position: relative;
+    display:flex; align-items:center; justify-content:space-between;
+    background: var(--item-bg);
+    border:1px solid var(--divider);
+    border-radius:22px;
+    padding:24px 22px;
+    text-decoration:none; color:var(--text);
+    min-height:124px; /* big tap target */
+    box-shadow:0 1px 0 rgba(255,255,255,.06) inset;
+    transition: background .15s ease, color .15s ease, transform .02s ease;
+    gap:20px;
+  }
+  .contact:active{ transform: translateY(1px); }
+  .contact .left{
+    display:flex; align-items:flex-end; gap:14px; min-width:0; flex:1 1 auto;
+  }
+  .contact .name{
+    font-size:2.9rem; /* 2× big */
+    font-weight:900; letter-spacing:.02em;
+    line-height:1.15;          /* prevent descender clipping */
+    padding-bottom:4px;        /* extra space for descenders like “g” */
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    transition: transform .15s ease;
+  }
+  .hint-inline{
+    margin-left:12px; padding:6px 10px; border-radius:999px;
+    background:#0d1510; color:#c9f1d6; font-size:1.05rem; font-weight:800;
+    display:none;
+  }
+  .contact.selected .hint-inline{ display:inline-block; }
+
+  .hint-pill{
+    position:absolute; left:22px; bottom:-16px;
+    background:#2ecc71; color:#031208; border-radius:999px;
+    padding:6px 10px; font-weight:900; font-size:1rem;
+    box-shadow:0 2px 10px rgba(0,0,0,.35);
+    display:none;
+  }
+  .contact.selected .hint-pill{ display:block; }
+
+  /* Icon container: aligned box */
+  .video-icon{
+    width:64px; height:64px; flex:0 0 64px;
+    display:grid; place-items:center; align-self:center;
+    border-radius:14px;
+    transition: transform .2s ease, opacity .12s ease;
+    opacity:.95;
+    overflow: visible; /* allow fat strokes beyond box */
+  }
+  .video-icon svg{ width:100%; height:100%; display:block; overflow:visible; }
+
+  /* Path stack: outer stroke, inner stroke, fill */
+  .video-icon svg .stroke-outer,
+  .video-icon svg .stroke-inner{ fill:none; stroke:transparent; }
+  .video-icon svg .fill{ fill:#e9f7ee; }
+
+  .contact:hover, .contact:focus-visible{ outline:4px solid var(--focus); outline-offset:3px; }
+
+  /* Selection visuals */
+  .contact.selected{ background: var(--green); color:#07130a; }
+  .contact.selected .name{ color:#07130a; }
+  /* Shrink Margarette's name to 50% when selected */
+  .contact.selected[data-name="Margarette"] .name {
+  display:inline-block;
+  transform: scale(0.75);
+  transform-origin: left center;
+  vertical-align: middle;
+}
+  .contact.selected .video-icon{ transform: translateX(50%) scale(2); opacity:1; }
+  .contact.selected .video-icon svg .stroke-outer{
+    stroke:#2ecc71; stroke-width:var(--stroke-outer); stroke-linejoin:round; stroke-linecap:round; paint-order:stroke fill;
+  }
+  .contact.selected .video-icon svg .stroke-inner{
+    stroke:#000; stroke-width:var(--stroke-inner); stroke-linejoin:round; stroke-linecap:round; paint-order:stroke fill;
+  }
+  .contact.selected .video-icon svg .fill{ fill:#07130a; }
+
+  /* Wiggle animation (medium drift) */
+  @keyframes wiggleX {
+    0%{ transform: translateX(50%) scale(2); }
+    25%{ transform: translateX(60%) scale(2); }
+    50%{ transform: translateX(50%) scale(2); }
+    75%{ transform: translateX(40%) scale(2); }
+    100%{ transform: translateX(50%) scale(2); }
+  }
+  .contact.selected .video-icon.wiggle{
+    animation: wiggleX 1.2s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce){
+    .contact.selected .video-icon.wiggle{ animation:none; }
+  }
+
+  /* Stage (under the sidebar) */
+  .stage{
+    position: relative;
+    z-index: 1;
+    background: radial-gradient(1100px 620px at 62% 38%, #0e2a16 0%, #0a1a10 35%, #071009 65%, #050806 100%);
+    display:grid; place-items:center; padding:24px; overflow:auto;
+  }
+  .dialer{
+    width:min(560px, 92vw);
+    transform: scale(.85); transform-origin: top center;  /* smaller dialer */
+    display:grid; gap:18px;
+  }
+
+  .display{
+    background: linear-gradient(180deg, #0f151a 0%, #0c1115 100%);
+    border:1px solid #1d242b; border-radius:20px;
+    padding:26px 20px; font-weight:900; font-size: clamp(36px, 8vw, 64px);
+    letter-spacing:.06em; color:#e7f6ec; text-align:center;
+    box-shadow:0 2px 0 #0f1317 inset, 0 12px 28px rgba(0,0,0,.55);
+    min-height:88px; user-select:none;
+  }
+
+  /* Skeuomorphic dial pad */
+  .keys{
+    display:grid; grid-template-columns: repeat(3, 1fr); gap:22px;
+  }
+  .key{
+    position: relative; display:grid; place-items:center;
+    border-radius:28px; min-height:160px;
+    font-weight:900; font-size:5.4rem; color:#f3fbf6;
+    cursor:pointer; -webkit-tap-highlight-color: transparent;
+
+    /* Raised look with glossy top */
+    background:
+      radial-gradient(150% 120% at 50% 8%, rgba(255,255,255,.22), rgba(255,255,255,0) 40%),
+      linear-gradient(180deg, #1a232b 0%, #10161b 45%, #0b1014 100%);
+    border:1px solid #0f151a;
+    box-shadow:
+      0 18px 30px var(--button-shadow),     /* outer drop */
+      0 1px 0 rgba(255,255,255,.06) inset,  /* thin top inner highlight */
+      0 -2px 0 rgba(0,0,0,.55) inset;       /* bottom inner shadow */
+
+    transition: transform .06s ease, box-shadow .06s ease, filter .06s ease;
+  }
+  .key::before{
+    content:""; position:absolute; left:8%; right:8%; top:8%;
+    height:22%; border-radius:18px;
+    background: linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,0));
+    pointer-events:none;
+  }
+  .key::after{
+    content:""; position:absolute; inset:0; border-radius:28px;
+    box-shadow: 0 0 0 1px rgba(255,255,255,.06) inset, 0 0 0 8px rgba(0,0,0,.25) inset;
+    pointer-events:none;
+  }
+  /* “Inward” pressed state: deeper inner shadows, lighter top, slight drop */
+  .key:active,
+  .key.pressed{
+    transform: translateY(4px);
+    filter: brightness(.95);
+    box-shadow:
+      0 10px 18px var(--button-shadow),      /* shallower outer drop when pressed */
+      0 3px 0 rgba(0,0,0,.75) inset,         /* stronger bottom inner */
+      0 -3px 0 rgba(255,255,255,.06) inset,  /* stronger top inner highlight */
+      inset 0 12px 18px rgba(0,0,0,.55);     /* deep cavity */
+  }
+
+  .key.alt{
+    font-size:1.8rem; font-weight:800; letter-spacing:.03em; color:#e4edf4;
+    background:
+      radial-gradient(150% 120% at 50% 8%, rgba(255,255,255,.18), rgba(255,255,255,0) 40%),
+      linear-gradient(180deg, #1b2229 0%, #12181e 45%, #0c1116 100%);
+  }
+
+  .call{
+    display:flex; align-items:center; justify-content:center; gap:14px;
+    background: linear-gradient(180deg, var(--green) 0%, var(--green-strong) 100%);
+    color:#062713; border:0; border-radius:24px;
+    font-weight:900; font-size:1.35rem; padding:24px 20px;
+    box-shadow: 0 2px 0 rgba(255,255,255,.25) inset, 0 20px 30px rgba(39,174,96,.35);
+    text-decoration:none; text-align:center;
+    pointer-events:none; opacity:.55;
+    transition: transform .06s ease, box-shadow .06s ease, filter .06s ease;
+  }
+  .call.enabled{ pointer-events:auto; opacity:1; }
+  .call:active{ transform: translateY(2px); filter: brightness(.98); }
+  .call svg{ width:28px; height:28px; display:block; fill:#062713; }
+  .assist{ text-align:center; color:#cfe9d7; opacity:.98; font-size:1.05rem; }
+
+  @media (max-width:900px){
+    .app{ grid-template-columns:1fr; grid-template-rows:auto 1fr; }
+    .stage{ min-height:52vh; }
+    .dialer{ transform: none; } /* full size when stacked */
+  }
+
+  /* Focus visibility */
+  a:focus-visible, button:focus-visible{ outline:4px solid var(--focus); outline-offset:3px; }
+
+/* === Margarette overflow without ellipsis (preserve layout box) === */
+.contact[data-name="Margarette"] .name{
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: nowrap !important;
+  position: relative;
+  z-index: 1;
+}
+.contact .left{ overflow: visible; }
+
+/* === Zoom & Scroll Lock + Stage size === */
+html, body { height: 100%; overflow: hidden; }
+body { touch-action: manipulation; overscroll-behavior: none; }
+.stage { /* background at 100% size */ }
+/* Prevent text-size adjust on iOS zoom */
+html { -webkit-text-size-adjust: 100%; }
+/* === end === */
+
+/* Scale only the dialer to 70% */
+.dialer { transform: scale(0.7); transform-origin: top center; }
+</style>
+</head>
+<body>
+  <!-- immediately after <body> opens -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./service-worker.js', { scope: './' });
+      });
+    }
+  
+/* === Disable pinch-zoom & page scrolling (iOS-friendly) === */
+(function(){
+  ['gesturestart','gesturechange','gestureend'].forEach(function(evt){
+    document.addEventListener(evt, function(e){ e.preventDefault(); }, {passive:false});
+  });
+  document.addEventListener('touchmove', function(e){ e.preventDefault(); }, {passive:false});
+  window.addEventListener('scroll', function(){ window.scrollTo(0,0); }, {passive:false});
+})();
+/* === end === */
+
+</script>
+
+  <div class="app" role="application" aria-label="Simple FaceTime">
+    <!-- Sidebar (above stage) -->
+    <aside class="sidebar" aria-label="Contacts">
+      <div class="brand">
+        <h1>FaceTime</h1>
+        <p class="new-btn">New FaceTime</a>
+      </div>
+
+      <div class="section-wrap">
+        <p class="section-label" aria-hidden="true">Favorites</p>
+      </div>
+
+      <nav class="list" aria-label="Favorite contacts" id="contacts">
+        <!-- First tap = select (green highlight + icon emphasis). Second tap (or icon tap) = call. -->
+        <a class="contact" href="facetime://7744540015" data-name="David" aria-label="Call David on FaceTime">
+          <div class="left">
+            <span class="name">David</span>
+            <span class="hint-inline">Tap again to call</span>
+          </div>
+          <span class="video-icon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512">
+              <path class="stroke-outer" d="M96 64c-35.3 0-64 28.7-64 64l0 256c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-256c0-35.3-28.7-64-64-64L96 64zM464 336l73.5 58.8c4.2 3.4 9.4 5.2 14.8 5.2 13.1 0 23.7-10.6 23.7-23.7l0-240.6c0-13.1-10.6-23.7-23.7-23.7-5.4 0-10.6 1.8-14.8 5.2L464 176 464 336z"/>
+              <path class="stroke-inner" d="M96 64c-35.3 0-64 28.7-64 64l0 256c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-256c0-35.3-28.7-64-64-64L96 64zM464 336l73.5 58.8c4.2 3.4 9.4 5.2 14.8 5.2 13.1 0 23.7-10.6 23.7-23.7l0-240.6c0-13.1-10.6-23.7-23.7-23.7-5.4 0-10.6 1.8-14.8 5.2L464 176 464 336z"/>
+              <path class="fill" d="M96 64c-35.3 0-64 28.7-64 64l0 256c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-256c0-35.3-28.7-64-64-64L96 64zM464 336l73.5 58.8c4.2 3.4 9.4 5.2 14.8 5.2 13.1 0 23.7-10.6 23.7-23.7l0-240.6c0-13.1-10.6-23.7-23.7-23.7-5.4 0-10.6 1.8-14.8 5.2L464 176 464 336z"/>
+            </svg>
+          </span>
+          <span class="hint-pill">Tap again to call</span>
+        </a>
+<a class="contact" href="facetime://6172811204" data-name="Margarette" aria-label="Call Margarette on FaceTime">
+          <div class="left">
+            <span class="name">Margarette</span>
+            <span class="hint-inline">Tap again to call</span>
+          </div>
+          <span class="video-icon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512">
+              <path class="stroke-outer" d="M96 64c-35.3 0-64 28.7-64 64l0 256c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-256c0-35.3-28.7-64-64-64L96 64zM464 336l73.5 58.8c4.2 3.4 9.4 5.2 14.8 5.2 13.1 0 23.7-10.6 23.7-23.7l0-240.6c0-13.1-10.6-23.7-23.7-23.7-5.4 0-10.6 1.8-14.8 5.2L464 176 464 336z"/>
+              <path class="stroke-inner" d="M96 64c-35.3 0-64 28.7-64 64l0 256c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-256c0-35.3-28.7-64-64-64L96 64zM464 336l73.5 58.8c4.2 3.4 9.4 5.2 14.8 5.2 13.1 0 23.7-10.6 23.7-23.7l0-240.6c0-13.1-10.6-23.7-23.7-23.7-5.4 0-10.6 1.8-14.8 5.2L464 176 464 336z"/>
+              <path class="fill" d="M96 64c-35.3 0-64 28.7-64 64l0 256c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-256c0-35.3-28.7-64-64-64L96 64zM464 336l73.5 58.8c4.2 3.4 9.4 5.2 14.8 5.2 13.1 0 23.7-10.6 23.7-23.7l0-240.6c0-13.1-10.6-23.7-23.7-23.7-5.4 0-10.6 1.8-14.8 5.2L464 176 464 336z"/>
+            </svg>
+          </span>
+          <span class="hint-pill">Tap again to call</span>
+        </a>
+<a class="contact" href="facetime://5082094545" data-name="Phillip" aria-label="Call Phillip on FaceTime">
+          <div class="left">
+            <span class="name">Phillip</span>
+            <span class="hint-inline">Tap again to call</span>
+          </div>
+          <span class="video-icon" aria-hidden="true">
+            <!-- three stacked paths: outer stroke, inner stroke, fill -->
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512">
+              <path class="stroke-outer" d="M96 64c-35.3 0-64 28.7-64 64l0 256c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-256c0-35.3-28.7-64-64-64L96 64zM464 336l73.5 58.8c4.2 3.4 9.4 5.2 14.8 5.2 13.1 0 23.7-10.6 23.7-23.7l0-240.6c0-13.1-10.6-23.7-23.7-23.7-5.4 0-10.6 1.8-14.8 5.2L464 176 464 336z"/>
+              <path class="stroke-inner" d="M96 64c-35.3 0-64 28.7-64 64l0 256c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-256c0-35.3-28.7-64-64-64L96 64zM464 336l73.5 58.8c4.2 3.4 9.4 5.2 14.8 5.2 13.1 0 23.7-10.6 23.7-23.7l0-240.6c0-13.1-10.6-23.7-23.7-23.7-5.4 0-10.6 1.8-14.8 5.2L464 176 464 336z"/>
+              <path class="fill" d="M96 64c-35.3 0-64 28.7-64 64l0 256c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-256c0-35.3-28.7-64-64-64L96 64zM464 336l73.5 58.8c4.2 3.4 9.4 5.2 14.8 5.2 13.1 0 23.7-10.6 23.7-23.7l0-240.6c0-13.1-10.6-23.7-23.7-23.7-5.4 0-10.6 1.8-14.8 5.2L464 176 464 336z"/>
+            </svg>
+          </span>
+          <span class="hint-pill">Tap again to call</span>
+        </a></nav>
+    </aside>
+
+    <!-- Stage -->
+    <main class="stage" aria-label="Dialer">
+      <div class="dialer" aria-live="polite">
+        <div id="display" class="display" aria-label="Entered digits">(•••) •••-••••</div>
+
+        <div class="keys" aria-label="Dial pad">
+          <button class="key" data-num="1" aria-label="1">1</button>
+          <button class="key" data-num="2" aria-label="2">2</button>
+          <button class="key" data-num="3" aria-label="3">3</button>
+
+          <button class="key" data-num="4" aria-label="4">4</button>
+          <button class="key" data-num="5" aria-label="5">5</button>
+          <button class="key" data-num="6" aria-label="6">6</button>
+
+          <button class="key" data-num="7" aria-label="7">7</button>
+          <button class="key" data-num="8" aria-label="8">8</button>
+          <button class="key" data-num="9" aria-label="9">9</button>
+
+          <button class="key alt" id="clear" aria-label="Clear all">Clear</button>
+          <button class="key" data-num="0" aria-label="0">0</button>
+          <button class="key alt" id="back" aria-label="Delete last">Delete</button>
+        </div>
+
+        <a id="call" class="call" href="#" aria-disabled="true">
+          <!-- Phone handset icon (simple) -->
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" aria-hidden="true" focusable="false">
+            <path d="M224.2 89C216.3 70.1 195.7 60.1 176.1 65.4L170.6 66.9C106 84.5 50.8 147.1 66.9 223.3C104 398.3 241.7 536 416.7 573.1C493 589.3 555.5 534 573.1 469.4L574.6 463.9C580 444.2 569.9 423.6 551.1 415.8L453.8 375.3C437.3 368.4 418.2 373.2 406.8 387.1L368.2 434.3C297.9 399.4 241.3 341 208.8 269.3L253 233.3C266.9 222 271.6 202.9 264.8 186.3L224.2 89z"/>
+          </svg>
+          Call with FaceTime
+        </a>
+
+        <div class="assist">
+          Enter a <strong>10-digit US number</strong>.<br />
+          <strong>Clear</strong> erases everything; <strong>Delete</strong> removes the last digit.<br />
+          The Call button turns bright green when the number is complete
+        </div>
+      </div>
+    </main>
+  </div>
+
+<script>
+  (function(){
+    /* ---------- Audio (hidden, 40% volume) ---------- */
+    const audioCtx = (window.AudioContext || window.webkitAudioContext) ? new (window.AudioContext || window.webkitAudioContext)() : null;
+    const masterGain = audioCtx ? audioCtx.createGain() : null;
+    if (audioCtx && masterGain){
+      masterGain.gain.value = 0.4; /* 40% */
+      masterGain.connect(audioCtx.destination);
+    }
+    function beep(freq=800, durMs=70){
+      if (!audioCtx) return;
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = 'square';
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.6, audioCtx.currentTime + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + durMs/1000);
+      o.connect(g); g.connect(masterGain);
+      o.start();
+      o.stop(audioCtx.currentTime + durMs/1000 + 0.01);
+    }
+    function pop(){
+      if (!audioCtx) return;
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(500, audioCtx.currentTime);
+      o.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.08);
+      g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.7, audioCtx.currentTime + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.12);
+      o.connect(g); g.connect(masterGain);
+      o.start();
+      o.stop(audioCtx.currentTime + 0.14);
+    }
+    // iOS requires a user gesture to start audio; prime on first tap
+    let audioPrimed = false;
+    function primeAudio(){ if (audioCtx && !audioPrimed){ audioCtx.resume(); audioPrimed = true; } }
+
+    /* ---------- Dialer (10 digits, US format) ---------- */
+    const MAX_LEN = 10;
+    const disp = document.getElementById('display');
+    const call = document.getElementById('call');
+    const pad  = document.querySelector('.keys');
+    const clearBtn = document.getElementById('clear');
+    const backBtn  = document.getElementById('back');
+
+    let digits = "";
+
+    const fmtUS = s => {
+      // (###) ###-####
+      const a = s.substring(0,3);
+      const b = s.substring(3,6);
+      const c = s.substring(6,10);
+      if (!a) return "(•••) •••-••••";
+      if (s.length <= 3) return `(${a.padEnd(3,"•")}) •••-••••`;
+      if (s.length <= 6) return `(${a}) ${b.padEnd(3,"•")}-••••`;
+      return `(${a}) ${b}-${c.padEnd(4,"•")}`;
+    };
+
+    const refreshDialer = () => {
+      disp.textContent = fmtUS(digits);
+      if (digits.length === MAX_LEN){
+        call.classList.add('enabled');
+        call.setAttribute('href', 'facetime://' + digits);
+        call.removeAttribute('aria-disabled');
+      } else {
+        call.classList.remove('enabled');
+        call.setAttribute('href', '#');
+        call.setAttribute('aria-disabled', 'true');
+      }
+    };
+
+    // Add a brief "pressed" class for a satisfying inward press even on quick taps
+    function pressVisual(el){
+      el.classList.add('pressed');
+      setTimeout(()=> el.classList.remove('pressed'), 110);
+    }
+
+    pad.addEventListener('click', (e)=>{
+      const key = e.target.closest('.key');
+      if (!key) return;
+      primeAudio();
+      const num = key.getAttribute('data-num');
+      pressVisual(key);
+      if (!num) return;
+      if (digits.length < MAX_LEN){
+        digits += num;
+        refreshDialer();
+        beep(820, 70); // crisp tick
+      }
+    });
+
+    clearBtn.addEventListener('click', (e)=>{ primeAudio(); pressVisual(e.currentTarget); digits = ""; refreshDialer(); beep(420, 80); });
+    backBtn.addEventListener('click', (e)=>{ primeAudio(); pressVisual(e.currentTarget); digits = digits.slice(0,-1); refreshDialer(); beep(520, 60); });
+
+    document.addEventListener('keydown', (e)=>{
+      if (/\d/.test(e.key) && digits.length < MAX_LEN){ digits += e.key; refreshDialer(); beep(820, 70); }
+      if (e.key === 'Backspace'){ digits = digits.slice(0,-1); refreshDialer(); beep(520, 60); }
+      if (e.key.toLowerCase() === 'c'){ digits = ""; refreshDialer(); beep(420, 80); }
+      if (e.key === 'Enter' && digits.length === MAX_LEN){ location.href = 'facetime://' + digits; }
+    });
+
+    refreshDialer();
+
+    /* ---------- Contact selection, wiggle with auto-stop, pop sound ---------- */
+    const contactsEl = document.getElementById('contacts');
+    let selected = null;
+    let wiggleTimer = null;
+
+    function addWiggle(el){
+      const icon = el.querySelector('.video-icon');
+      icon.classList.add('wiggle');
+      if (wiggleTimer) clearTimeout(wiggleTimer);
+      wiggleTimer = setTimeout(()=> icon.classList.remove('wiggle'), 6000); // stop after ~6s
+    }
+
+    function selectContact(el){
+      if (selected && selected !== el){
+        selected.classList.remove('selected');
+        selected.removeAttribute('aria-pressed');
+        const prevIcon = selected.querySelector('.video-icon');
+        prevIcon.classList.remove('wiggle');
+      }
+      selected = el;
+      el.classList.add('selected');
+      el.setAttribute('aria-pressed', 'true');
+      addWiggle(el);
+      primeAudio();
+      pop(); // selection sound
+    }
+
+    function clearSelection(){
+      if (selected){
+        selected.classList.remove('selected');
+        selected.removeAttribute('aria-pressed');
+        const icon = selected.querySelector('.video-icon');
+        icon.classList.remove('wiggle');
+        selected = null;
+      }
+    }
+
+    contactsEl.addEventListener('click', (e)=>{
+      const link = e.target.closest('.contact');
+      if (!link) return;
+
+      if (link.classList.contains('selected')){
+        e.preventDefault();
+        window.location.href = link.getAttribute('href'); // second tap = call
+      } else {
+        e.preventDefault();
+        selectContact(link); // first tap = select
+      }
+    });
+
+    // tap anywhere else to unselect
+    document.addEventListener('click', (e)=>{
+      const insideContacts = e.target.closest('#contacts');
+      if (!insideContacts) clearSelection();
+    });
+
+    // keyboard support
+    contactsEl.addEventListener('keydown', (e)=>{
+      const link = e.target.closest('.contact');
+      if (!link) return;
+      if (e.key === 'Enter'){
+        if (!link.classList.contains('selected')){
+          e.preventDefault();
+          selectContact(link);
+        } else {
+          window.location.href = link.getAttribute('href');
+        }
+      }
+      if (e.key === 'Escape'){ clearSelection(); }
+    });
+  
+    /* ---------- Idle / Inactivity handling (clear selection only) ---------- */
+    let idleTimer = null;
+    function clearAllSelections(){
+      const selectedContacts = document.querySelectorAll('.contact.selected');
+      selectedContacts.forEach(el => {
+        el.classList.remove('selected');
+        el.removeAttribute('aria-pressed');
+        const icon = el.querySelector('.video-icon');
+        if (icon) icon.classList.remove('wiggle');
+      });
+    }
+    function setIdle(){ clearAllSelections(); }
+    function resetIdle(){
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(setIdle, 15000); // 15 seconds
+    }
+    // Reset timer on interactions
+    ['click','pointerdown','touchstart','keydown','focus'].forEach(evt=>{
+      document.addEventListener(evt, resetIdle, {passive:true});
+    });
+    // Clear immediately when tab is hidden or window not focused (FaceTime will bring app to foreground)
+    document.addEventListener('visibilitychange', ()=>{
+      if (document.hidden) { setIdle(); } else { resetIdle(); }
+    });
+    window.addEventListener('blur', setIdle);
+    window.addEventListener('focus', resetIdle);
+    // Start on first gesture (iOS audio+gesture constraints)
+    document.addEventListener('pointerdown', function once(){
+      resetIdle();
+      document.removeEventListener('pointerdown', once);
+    }, {passive:true});
+    /* ---------- end Idle / Inactivity handling ---------- */
+})();
+</script>
+</body>
+</html>
